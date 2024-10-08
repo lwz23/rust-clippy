@@ -140,6 +140,7 @@ mod fallible_impl_from;
 mod field_scoped_visibility_modifiers;
 mod float_literal;
 mod floating_point_arithmetic;
+mod foo_functions;
 mod format;
 mod format_args;
 mod format_impl;
@@ -944,5 +945,6 @@ pub fn register_lints(store: &mut rustc_lint::LintStore, conf: &'static Conf) {
     store.register_late_pass(|_| Box::new(manual_is_power_of_two::ManualIsPowerOfTwo));
     store.register_late_pass(|_| Box::new(non_zero_suggestions::NonZeroSuggestions));
     store.register_late_pass(move |_| Box::new(unused_trait_names::UnusedTraitNames::new(conf)));
+    store.register_late_pass(|_| Box::new(foo_functions::FooFunctions));
     // add lints here, do not remove this comment, it's used in `new_lint`
 }
