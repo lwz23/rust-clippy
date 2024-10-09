@@ -32,9 +32,10 @@ impl<'tcx> LateLintPass<'tcx> for FooFunctions {
         }
 
         let mut unsafe_ops = vec![];
-        let state_num = block.stmts.len();
+        let mut ops=vec![];
         collect_unsafe_exprs(cx, block, &mut unsafe_ops);
-        
+        collect_exprs(cx, block, &mut ops);
+
         if unsafe_ops.is_empty() {
             span_lint_and_then(
                 cx,
@@ -54,89 +55,37 @@ impl<'tcx> LateLintPass<'tcx> for FooFunctions {
         }
 
         if unsafe_ops.len() == 1 {
-            if state_num > 1 {
-                let (msg, span) = unsafe_ops.get(0).unwrap();
+            let unsafe_span = unsafe_ops[0].1;
+
+            let mut overscoped_unsafe=false;
+            
+            for (_, op_span) in &ops {
+                // 检查当前 ops 的 span 是否超出 unsafe_span
+                if !unsafe_span.contains(*op_span) {
+                    overscoped_unsafe=true; // 存在超出范围的情况
+                }
+            }
+            if overscoped_unsafe{
                 span_lint_and_then(
                     cx,
                     FOO_FUNCTIONS,
                     block.span,
                     format!(
-                        "this `unsafe` block contains overscoped unsafe block, unsafe_block_spans:{:?}, unsafe_op_span:{:?}",
-                        block.span,
-                        span
+                        "this `unsafe` block contains overscoped unsafe block, unsafe_ops:{}",
+                        unsafe_ops.len()
                     ),
                     |diag| {
                         for (msg, span) in &unsafe_ops { 
-                            diag.span_note(*span, format!(
-                                "this `unsafe` block contains overscoped unsafe block, unsafe_block_spans:{:?}, unsafe_op_span:{:?}",
-                                block.span,
-                                span
-                            ));
+                            diag.span_note(*span, *msg);
                         }
                     },
                 );
-            } else if state_num == 1 {
-                // TODO:处理仅有一个 unsafe 操作的情况
-                let st=block.stmts.get(0);
-                match st.unwrap().kind {
-                    hir::StmtKind::Expr(expr) => {
-                        match expr.kind {
-                            ExprKind::If(_, then_block, else_block) => {
-                                let then_count = match then_block.kind {
-                                    ExprKind::Block(ref block, _) => block.stmts.len(),
-                                    _ => 0,
-                                };
-                                let else_count = match else_block.unwrap().kind {
-                                    ExprKind::Block(ref block, _) => block.stmts.len(),
-                                    _ => 0,
-                                };
-
-                                if then_count > 1 || else_count > 1 {
-                                    span_lint_and_then(
-                                        cx,
-                                        FOO_FUNCTIONS,
-                                        block.span,
-                                        format!(
-                                            "this `unsafe` block contains overscoped unsafe block, unsafe_block_spans:{:?}",
-                                            block.span,
-                                        ),
-                                        |diag| {
-                                                diag.span_note(block.span, format!(
-                                                    "this `unsafe` block contains overscoped unsafe block, unsafe_block_spans:{:?}",
-                                                    block.span,
-                                                ));
-                                        },
-                                    );
-                                }
-                            },
-                            ExprKind::Loop(e, _, _, _) => {
-                                let count=e.stmts.len();
-                                if count>1{
-                                    span_lint_and_then(
-                                        cx,
-                                        FOO_FUNCTIONS,
-                                        block.span,
-                                        format!(
-                                            "this `unsafe` block contains overscoped unsafe block, unsafe_block_spans:{:?}",
-                                            block.span,
-                                        ),
-                                        |diag| {
-                                                diag.span_note(block.span, format!(
-                                                    "this `unsafe` block contains overscoped unsafe block, unsafe_block_spans:{:?}",
-                                                    block.span,
-                                                ));
-                                        },
-                                    );
-                                }
-                            },
-                             _=>{}
-                        }
-                    }
-                    _=>{}
-                }
-
             }
+                
+            
+            
         }
+        
 
         if unsafe_ops.len() > 1 {
             span_lint_and_then(
@@ -197,6 +146,18 @@ fn collect_unsafe_exprs<'tcx>(
             _ => {}
         };
 
+        Continue::<(), _>(Descend::Yes)
+    });
+}
+
+
+fn collect_exprs<'tcx>(
+    cx: &LateContext<'tcx>,
+    node: impl Visitable<'tcx>,
+    ops: &mut Vec<(&'static str, Span)>,
+) {
+    for_each_expr(cx, node, |expr| {
+        ops.push(("expr occurs here", expr.span));
         Continue::<(), _>(Descend::Yes)
     });
 }
